@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=1100">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>青学授業マップ - 全フロア対応版</title>
     <style>
         body { margin: 0; padding: 0; background-color: #1a1a24; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; color: #fff; }
@@ -68,6 +68,20 @@
         .active-manual { transform: translateZ(60px) !important; }
         .active-manual .top { background: rgba(46, 204, 113, 0.7) !important; box-shadow: 0 0 40px rgba(46, 204, 113, 0.9) !important; border-color: #55efc4 !important; color: #fff !important; }
         .room::before { content: ''; position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.5); filter: blur(10px); transition: all 0.5s ease; pointer-events: none; }
+
+        /* --- スマホ用レスポンシブ --- */
+        @media screen and (max-width: 800px) {
+            /* マップを少し上にずらして縮小表示 */
+            .scene { transform: translateY(-100px) scale(0.45); }
+            /* パネルを画面下部に配置し、横幅を広げる */
+            .left-panel { top: auto; bottom: 15px; left: 5%; width: 90%; gap: 10px; }
+            /* リストの高さを抑えてスクロールしやすくする */
+            .manual-panel { max-height: 35vh; padding: 12px; }
+            /* ステータスバーの調整 */
+            #status-display { width: 90%; font-size: 13px; padding: 8px; top: 15px; box-sizing: border-box; }
+            /* フロアラベルをステータスバーの下に移動 */
+            #floor-label { bottom: auto; top: 55px; right: 5%; font-size: 16px; }
+        }
     </style>
 </head>
 <body>
