@@ -71,8 +71,8 @@
 
         /* --- スマホ用レスポンシブ --- */
         @media screen and (max-width: 800px) {
-            /* マップを少し上にずらして縮小表示 */
-            .scene { transform: translateY(-100px) scale(0.45); }
+            /* マップを画面中央付近に絶対配置し、はみ出ないように位置とサイズを微調整 */
+            .scene { position: absolute; top: 40%; left: 50%; transform: translate(-60%, -50%) scale(0.38); }
             /* パネルを画面下部に配置し、横幅を広げる */
             .left-panel { top: auto; bottom: 15px; left: 5%; width: 90%; gap: 10px; }
             /* リストの高さを抑えてスクロールしやすくする */
@@ -80,7 +80,7 @@
             /* ステータスバーの調整 */
             #status-display { width: 90%; font-size: 13px; padding: 8px; top: 15px; box-sizing: border-box; }
             /* フロアラベルをステータスバーの下に移動 */
-            #floor-label { bottom: auto; top: 55px; right: 5%; font-size: 16px; }
+            #floor-label { bottom: auto; top: 60px; right: 5%; font-size: 16px; }
         }
     </style>
 </head>
