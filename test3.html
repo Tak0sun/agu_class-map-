@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>青学授業マップ - 全フロア対応版</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #1a1a24; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; color: #fff; }
+
+        /* --- ステータスバー --- */
+        #status-display {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(40, 40, 50, 0.9); padding: 10px 25px; border-radius: 50px;
+            border: 1px solid rgba(255, 255, 255, 0.2); z-index: 110; backdrop-filter: blur(10px);
+            white-space: nowrap; box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+        #status-display .time { font-weight: bold; color: #64b4ff; margin-right: 10px; }
+
+        /* --- 現在表示中のフロア名 --- */
+        #floor-label {
+            position: absolute; bottom: 30px; right: 30px; font-size: 24px; font-weight: bold;
+            color: rgba(255, 255, 255, 0.6); letter-spacing: 2px; z-index: 50; text-transform: uppercase;
+        }
+
+        /* --- コントロールパネル --- */
+        .left-panel { position: absolute; left: 20px; top: 80px; width: 240px; display: flex; flex-direction: column; gap: 15px; z-index: 100; }
+        .day-selector { background: rgba(30, 30, 40, 0.8); padding: 10px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; }
+        .day-btn { background: transparent; border: none; color: #666; cursor: pointer; padding: 5px 8px; font-weight: bold; transition: all 0.3s; border-radius: 5px; }
+        .day-btn.active { color: #fff; background: rgba(100, 180, 255, 0.3); }
+
+        .manual-panel { background: rgba(30, 30, 40, 0.8); padding: 15px; border-radius: 15px; border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); max-height: 60vh; overflow-y: auto; }
+        .manual-panel h4 { margin: 0 0 10px 0; font-size: 12px; color: #aaa; text-transform: uppercase; }
+        .class-item { padding: 10px; margin-bottom: 8px; border-radius: 8px; background: rgba(255,255,255,0.05); cursor: pointer; font-size: 13px; transition: all 0.3s; border: 1px solid transparent; }
+        .class-item.selected-manual { background: rgba(46, 204, 113, 0.2); border-color: #2ecc71; color: #2ecc71; }
+
+        /* --- 3Dマップ設定 --- */
+        .scene {
+            position: relative; perspective: 1500px; transform: translateY(40px);
+            width: 800px; height: 600px;
+        }
+        
+        /* マップコンテナの基本設定 (クロスフェード用) */
+        .map {
+            width: 100%; height: 100%; position: absolute; top: 0; left: 0;
+            transform-style: preserve-3d; transform: rotateX(60deg) rotateZ(-35deg);
+            background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+            background-size: 20px 20px; background-color: rgba(40, 40, 50, 0.4);
+            transition: opacity 0.6s ease-in-out; opacity: 0; visibility: hidden; z-index: 1;
+        }
+        .map.active { opacity: 1; visibility: visible; z-index: 2; }
+
+        /* パーツの基本設定 */
+        .flat-area { position: absolute; background: rgba(150, 150, 160, 0.15); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .room { position: absolute; transform-style: preserve-3d; transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .face { position: absolute; transition: all 0.5s ease; }
+        .top { width: 100%; height: 100%; background: rgba(100, 180, 255, 0.1); backdrop-filter: blur(5px); border: 1px solid rgba(255, 255, 255, 0.2); transform: translateZ(40px); display: flex; justify-content: center; align-items: center; font-size: 16px; font-weight: bold; color: rgba(255,255,255,0.3); text-align: center; }
+        .front, .back, .left, .right { background: rgba(100, 180, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); height: 40px; }
+        .front { width: 100%; bottom: 0; transform-origin: bottom; transform: rotateX(-90deg); }
+        .back { width: 100%; top: 0; transform-origin: top; transform: rotateX(90deg); }
+        .right { width: 40px; height: 100%; right: 0; transform-origin: right; transform: rotateY(90deg); }
+        .left { width: 40px; height: 100%; left: 0; transform-origin: left; transform: rotateY(-90deg); }
+
+        /* ハイライト状態 */
+        .active-now { transform: translateZ(45px); }
+        .active-now .top { background: rgba(231, 76, 60, 0.6); box-shadow: 0 0 30px rgba(231, 76, 60, 0.8); border-color: #ff7675; color: #fff; }
+        .active-next { transform: translateZ(25px); }
+        .active-next .top { background: rgba(241, 196, 15, 0.5); box-shadow: 0 0 25px rgba(241, 196, 15, 0.7); border-color: #ffeaa7; color: #fff; }
+        .active-manual { transform: translateZ(60px) !important; }
+        .active-manual .top { background: rgba(46, 204, 113, 0.7) !important; box-shadow: 0 0 40px rgba(46, 204, 113, 0.9) !important; border-color: #55efc4 !important; color: #fff !important; }
+        .room::before { content: ''; position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.5); filter: blur(10px); transition: all 0.5s ease; pointer-events: none; }
+
+        /* スマホ用レスポンシブ */
+        @media screen and (max-width: 800px) {
+            .scene { transform: translateY(-80px) scale(0.45); }
+            .left-panel { top: auto; bottom: 20px; left: 5%; width: 90%; gap: 8px; }
+            .manual-panel { max-height: 35vh; padding: 10px; }
+            #status-display { width: 90%; font-size: 13px; padding: 8px; top: 15px; box-sizing: border-box; }
+            #floor-label { bottom: auto; top: 60px; right: 20px; font-size: 16px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="status-display">
+        <span class="time" id="current-time-text">00:00</span>
+        <span id="status-message">Loading...</span>
+    </div>
+
+    <div id="floor-label"></div>
+
+    <div class="left-panel">
+        <div class="day-selector">
+            <button class="day-btn" onclick="setDay(1)">月</button>
+            <button class="day-btn" onclick="setDay(2)">火</button>
+            <button class="day-btn" onclick="setDay(3)">水</button>
+            <button class="day-btn" onclick="setDay(4)">木</button>
+            <button class="day-btn" onclick="setDay(5)">金</button>
+        </div>
+        <div class="manual-panel">
+            <h4 id="selected-day-label">Schedule</h4>
+            <div id="class-list-container"></div>
+        </div>
+    </div>
+
+    <div class="scene">
+        <div class="map" id="map-container-1"></div>
+        <div class="map" id="map-container-2"></div>
+    </div>
+
+    <script>
+        const fullSchedule = {
+            1: [ { id: "m2", period: 2, start: "11:00", end: "12:30", name: "数値解析", room: "f408" }, { id: "m3", period: 3, start: "13:20", end: "14:50", name: "統計力学Ⅰ", room: "e304" } ],
+            2: [ { id: "t1", period: 1, start: "09:00", end: "10:30", name: "電気・電子回路入門", room: "f307" }, { id: "t2", period: 2, start: "11:00", end: "12:30", name: "コンピュータアプリケーション演習", room: "n604b" }, { id: "t3", period: 3, start: "13:20", end: "14:50", name: "原子核物理", room: "f307" }, { id: "t4", period: 4, start: "15:05", end: "16:35", name: "物理専門実験Ⅰ", room: "l602" }, { id: "t5", period: 5, start: "16:50", end: "18:20", name: "青スタ", room: "online" } ],
+            3: [ { id: "w2", period: 2, start: "11:00", end: "12:30", name: "相対論", room: "d214" } ],
+            4: [ { id: "th2", period: 2, start: "11:00", end: "12:30", name: "固体物理", room: "f307" }, { id: "th3", period: 3, start: "13:20", end: "14:50", name: "天体物理概論", room: "e307" }, { id: "th4", period: 4, start: "15:05", end: "16:35", name: "最新物理講義", room: "e106" } ],
+            5: [ { id: "f2", period: 2, start: "11:00", end: "12:30", name: "量子力学Ⅱ", room: "e106" }, { id: "f3", period: 3, start: "13:20", end: "14:50", name: "English A", room: "b308" }, { id: "f4", period: 4, start: "15:05", end: "16:35", name: "統計力学Ⅰ", room: "e105" } ]
+        };
+
+        const roomToFloor = {
+            "e101": "e1", "e102": "e1", "e103": "e1", "e104": "e1", "e105": "e1", "e106": "e1",
+            "e201": "e2", "e202": "e2", "e203": "e2", "e204": "e2", "e205": "e2", "e206": "e2", "e2_lounge": "e2",
+            "e301": "e3", "e302": "e3", "e303": "e3", "e304": "e3", "e305": "e3", "e306": "e3", "e307": "e3",
+            "b301": "b3", "b302": "b3", "b303": "b3", "b304": "b3", "b305": "b3", "b306": "b3", "b307": "b3", "b308": "b3",
+            "f307": "f3", "f408": "f4", "l602": "l6", "d214": "d2"
+        };
+
+        // ★ HTMLを自動生成する便利関数
+        function createRoom(id, name, width, height, left, top, fontSize = 16) {
+            return `<div class="room" id="${id}" style="width:${width}px; height:${height}px; left:${left}px; top:${top}px;">
+                        <div class="face front"></div><div class="face right"></div><div class="face back"></div><div class="face left"></div>
+                        <div class="face top" style="font-size:${fontSize}px;">${name}</div>
+                    </div>`;
+        }
+        function createFlatArea(className, width, height, left, top) {
+            return `<div class="flat-area ${className}" style="width:${width}px; height:${height}px; left:${left}px; top:${top}px;"></div>`;
+        }
+
+        // --- フロアごとのレイアウトデータ ---
+        const floorLayouts = {
+            "e1": {
+                name: "E棟 1階",
+                html: createFlatArea('corridor', 680, 60, 80, 270) +
+                      createRoom('e106', 'E-106', 140, 150, 80, 120) +
+                      createRoom('e105', 'E-105', 140, 150, 310, 120) +
+                      createRoom('e104', 'E-104', 140, 150, 450, 120) +
+                      createRoom('e103', 'E-103', 130, 180, 210, 330) +
+                      createRoom('e102', 'E-102', 140, 180, 390, 330) +
+                      createRoom('e101', 'E-101', 150, 210, 580, 330)
+            },
+            "e2": {
+                name: "E棟 2階",
+                html: createFlatArea('corridor', 680, 60, 80, 270) +
+                      createRoom('e206', 'E-206', 130, 150, 80, 120) +
+                      createRoom('e2_lounge', 'ラウンジ', 100, 150, 220, 120, 12) +
+                      createRoom('e205', 'E-205', 130, 150, 330, 120) +
+                      createRoom('e204', 'E-204', 140, 150, 470, 120) +
+                      createRoom('e203', 'E-203', 130, 180, 210, 330) +
+                      createRoom('e202', 'E-202', 130, 180, 390, 330) +
+                      createRoom('e201', 'E-201', 150, 210, 580, 330)
+            },
+            "e3": {
+                name: "E棟 3階",
+                html: createFlatArea('corridor', 680, 60, 80, 270) +
+                      createRoom('e307', 'E-307', 110, 150, 80, 120) +
+                      createRoom('e306', 'E-306', 110, 150, 200, 120) +
+                      createRoom('e305', 'E-305', 110, 150, 320, 120) +
+                      createRoom('e304', 'E-304', 140, 150, 440, 120) +
+                      createRoom('e303', 'E-303', 130, 180, 210, 330) +
+                      createRoom('e302', 'E-302', 130, 180, 390, 330) +
+                      createRoom('e301', 'E-301', 150, 210, 580, 330)
+            },
+            "b3": {
+                name: "B棟 3階",
+                html: createFlatArea('corridor', 600, 60, 100, 270) +
+                      createRoom('b304', 'B-304', 90, 110, 100, 150) + createRoom('b303', 'B-303', 90, 110, 200, 150) +
+                      createRoom('b302', 'B-302', 70, 110, 300, 150) + createRoom('b301', 'B-301', 70, 110, 380, 150) +
+                      createRoom('b308', 'B-308', 90, 110, 100, 340) + createRoom('b307', 'B-307', 90, 110, 200, 340) +
+                      createRoom('b306', 'B-306', 70, 110, 300, 340) + createRoom('b305', 'B-305', 70, 110, 380, 340) +
+                      createRoom('b_study_a', 'Gr.A', 60, 50, 550, 340, 10) +
+                      createRoom('b_study_b', 'Gr.B', 60, 50, 550, 400, 10) +
+                      createRoom('b_study_c', 'Gr.C', 40, 110, 620, 340, 10)
+            },
+            "f3": { name: "F棟 3階", html: createRoom('f307', 'F-307', 180, 200, 310, 200) },
+            "f4": { name: "F棟 4階", html: createRoom('f408', 'F-408', 180, 200, 310, 200) },
+            "l6": { name: "L棟 6階", html: createRoom('l602', 'L-602', 180, 200, 310, 200) },
+            "d2": { name: "D棟 2階", html: createRoom('d214', 'D-214', 180, 200, 310, 200) }
+        };
+
+        let currentSelectedDay = new Date().getDay();
+        if (currentSelectedDay === 0 || currentSelectedDay === 6) currentSelectedDay = 1;
+
+        let manualSelectedRoom = null;
+        let activeFloor = null;
+
+        function switchFloor(targetFloor, callback) {
+            if (activeFloor === targetFloor || !floorLayouts[targetFloor]) {
+                if (callback) callback();
+                return;
+            }
+
+            const container1 = document.getElementById('map-container-1');
+            const container2 = document.getElementById('map-container-2');
+            let currentContainer = container1.classList.contains('active') ? container1 : (container2.classList.contains('active') ? container2 : null);
+            let nextContainer = (currentContainer === container1) ? container2 : container1;
+
+            if (!currentContainer) {
+                activeFloor = targetFloor;
+                document.getElementById('floor-label').innerText = floorLayouts[targetFloor].name;
+                container1.innerHTML = floorLayouts[targetFloor].html;
+                container1.classList.add('active');
+                if (callback) callback();
+                return;
+            }
+
+            nextContainer.innerHTML = floorLayouts[targetFloor].html;
+            
+            requestAnimationFrame(() => {
+                activeFloor = targetFloor;
+                document.getElementById('floor-label').innerText = floorLayouts[targetFloor].name;
+                nextContainer.classList.add('active');
+                currentContainer.classList.remove('active');
+                setTimeout(() => { if (callback) callback(); }, 600);
+            });
+        }
+
+        function setDay(dayIndex) {
+            currentSelectedDay = dayIndex;
+            manualSelectedRoom = null;
+            renderDayButtons();
+            renderClassList();
+            checkAndSwitchFloor();
+        }
+
+        function renderDayButtons() {
+            const btns = document.querySelectorAll('.day-btn');
+            btns.forEach((btn, idx) => { btn.classList.toggle('active', idx + 1 === currentSelectedDay); });
+        }
+
+        function renderClassList() {
+            const container = document.getElementById('class-list-container');
+            const dayNames = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+            document.getElementById('selected-day-label').innerText = dayNames[currentSelectedDay];
+            container.innerHTML = '';
+
+            const dayClasses = fullSchedule[currentSelectedDay] || [];
+            if (dayClasses.length === 0) {
+                container.innerHTML = '<div style="font-size:12px; color:#555;">授業はありません</div>'; return;
+            }
+
+            dayClasses.forEach(c => {
+                const item = document.createElement('div');
+                item.className = 'class-item';
+                if (manualSelectedRoom === c.room) item.classList.add('selected-manual');
+                let roomDisplay = c.room === "未登録" ? "教室未登録" : c.room.toUpperCase();
+                item.innerHTML = `<strong>${c.period}限: ${c.name}</strong><br>${roomDisplay} (${c.start}〜)`;
+                item.onclick = () => {
+                    manualSelectedRoom = (manualSelectedRoom === c.room) ? null : c.room;
+                    renderClassList();
+                    checkAndSwitchFloor();
+                };
+                container.appendChild(item);
+            });
+        }
+
+        function checkAndSwitchFloor() {
+            const now = new Date(); 
+            const timeStr = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
+            document.getElementById('current-time-text').innerText = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+            const dayClasses = fullSchedule[currentSelectedDay] || [];
+            let current = dayClasses.find(c => timeStr >= c.start && timeStr <= c.end);
+            let next = dayClasses.filter(c => timeStr < c.start).sort((a, b) => a.start.localeCompare(b.start))[0];
+
+            const msg = document.getElementById('status-message');
+            if (current) msg.innerText = `現在 ${current.period}限: ${current.name}`;
+            else if (next) msg.innerText = `次は ${next.period}限: ${next.name}`;
+            else msg.innerText = `今日の授業は終了しました`;
+
+            let targetRoom = manualSelectedRoom || (current ? current.room : null) || (next ? next.room : null);
+            let targetFloor = "e1"; // デフォルト
+            if (targetRoom && targetRoom !== "未登録" && roomToFloor[targetRoom]) {
+                targetFloor = roomToFloor[targetRoom];
+            }
+
+            switchFloor(targetFloor, () => {
+                const activeMap = document.querySelector('.map.active');
+                if(!activeMap) return;
+                
+                activeMap.querySelectorAll('.room').forEach(r => r.classList.remove('active-now', 'active-next', 'active-manual'));
+                
+                if (current) {
+                    const el = activeMap.querySelector(`#${current.room}`);
+                    if (el) el.classList.add('active-now');
+                }
+                if (next) {
+                    const el = activeMap.querySelector(`#${next.room}`);
+                    if (el) el.classList.add('active-next');
+                }
+                if (manualSelectedRoom) {
+                    const el = activeMap.querySelector(`#${manualSelectedRoom}`);
+                    if (el) el.classList.add('active-manual');
+                }
+            });
+        }
+
+        setDay(currentSelectedDay);
+        setInterval(checkAndSwitchFloor, 1000);
+    </script>
+</body>
+</html>
